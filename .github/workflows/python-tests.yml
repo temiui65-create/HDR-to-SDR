@@ -3,7 +3,7 @@ name: Build macOS DMG
 on:
   push:
     branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정 (master 등)
-  workflow_dispatch:
+  workflow_dispatch: # 수동 빌드 버튼 활성화
 
 jobs:
   build-macos:
@@ -38,8 +38,7 @@ jobs:
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
         echo "Site packages path: $SITE_PACKAGES"
         
-        # macOS 환경에서는 폴더 통째로(--add-data) 복사할 때 경로가 꼬이지 않도록 
-        # 목적지 경로를 라이브러리 이름 명확히 지정해 주는 것이 안전합니다.
+        # macOS 환경에 맞춘 파이인스톨러 패키징 스크립트
         pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
           --hidden-import=numpy \
           --hidden-import=numpy.core \
@@ -53,16 +52,26 @@ jobs:
           --log-level DEBUG \
           src/main.pyw
 
-    - name: Create DMG
+    - name: Create DMG (Using appdmg)
       run: |
-        npm install -g create-dmg
-        cd dist
+        # 서명 에러가 없는 오픈소스 표준 DMG 빌드 도구 설치
+        npm install -g appdmg
         
-        # [핵심 수정] --identity="" 옵션을 추가하여 애플 인증서 서명 단계를 건너뜁니다.
-        create-dmg "HDR_to_SDR_Converter.app" --identity="" || true
+        # appdmg 구성을 위한 설정 JSON 정의 파일 동적 생성
+        cat << 'EOF' > appdmg.json
+        {
+          "title": "HDR to SDR Converter",
+          "icon": "logo/icon.ico",
+          "background": "",
+          "contents": [
+            { "x": 448, "y": 344, "type": "link", "path": "/Applications" },
+            { "x": 192, "y": 344, "type": "file", "path": "dist/HDR_to_SDR_Converter.app" }
+          ]
+        }
+        EOF
         
-        # 파일 이름 정형화
-        mv *.dmg HDR_to_SDR_Converter_macOS.dmg
+        # DMG 패키징 빌드 실행
+        appdmg appdmg.json dist/HDR_to_SDR_Converter_macOS.dmg
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
