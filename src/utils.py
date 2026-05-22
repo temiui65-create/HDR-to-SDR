@@ -80,13 +80,22 @@ def get_executable_path(filename):
     try:
         base_path = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
         
-        # [수정] 입력 인자가 확장자가 고정되어 들어오더라도 OS 플랫폼에 맞춰 확장자를 유연하게 보정
+        # 확장자 보정
         if sys.platform == 'win32' and not filename.endswith('.exe'):
             filename = f"{filename}.exe"
         elif sys.platform != 'win32' and filename.endswith('.exe'):
             filename = filename[:-4]
         
-        executable = os.path.normpath(os.path.join(base_path, filename))
+        # [핵심 수정] 파이썬 모듈과 바이너리 파일의 이름 충돌을 막기 위해 
+        # 빌드된 앱(frozen) 환경에서는 'bin' 하위 폴더에서 먼저 바이너리를 찾습니다.
+        if getattr(sys, 'frozen', False):
+            executable = os.path.normpath(os.path.join(base_path, 'bin', filename))
+            if not os.path.exists(executable):
+                # Fallback
+                executable = os.path.normpath(os.path.join(base_path, filename))
+        else:
+            executable = os.path.normpath(os.path.join(base_path, filename))
+            
         logging.debug(f"Looking for {filename} at: {executable}")
         
         if not os.path.exists(executable):
@@ -97,7 +106,7 @@ def get_executable_path(filename):
             else:
                 raise FileNotFoundError(f"{filename} not found in bundle or system PATH")
         
-        # [추가 안전장치] macOS 환경에서 혹시 바이너리의 실행 권한(chmod +x)이 누락되었을 경우를 대비해 권한 강제 부여
+        # macOS 실행 권한 보장
         if sys.platform != 'win32' and os.path.exists(executable):
             try:
                 os.chmod(executable, 0o755)
