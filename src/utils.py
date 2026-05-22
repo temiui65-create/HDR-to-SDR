@@ -9,6 +9,7 @@ import logging
 import sys
 import json
 import shutil
+import platform
 
 # Constants and initialization
 LOGGING_ENABLED = False
@@ -17,6 +18,13 @@ FFMPEG_FILTER = [
     'zscale=primaries=bt709:transfer=bt709:matrix=bt709,tonemap={tonemapper},eq=gamma={gamma},scale={width}:{height}',
     'zscale=t=linear:npl={npl},tonemap={tonemapper},zscale=t=bt709:m=bt709:r=tv:p=bt709,eq=gamma={gamma},scale={width}:{height}'
 ]
+
+# [수정] OS 환경에 따라 동적으로 바이너리 확장자 설정 (Windows: '.exe', macOS/Linux: '')
+EXE_EXT = ".exe" if sys.platform == "win32" else ""
+FFMPEG_NAME = f"ffmpeg{EXE_EXT}"
+FFPROBE_NAME = f"ffprobe{EXE_EXT}"
+FFPLAY_NAME = f"ffplay{EXE_EXT}"
+
 FFMPEG_EXECUTABLE = None
 FFPROBE_EXECUTABLE = None
 
@@ -71,7 +79,11 @@ def get_executable_path(filename):
     """Helper function to get the correct path for bundled executables"""
     try:
         base_path = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-        if sys.platform != 'win32' and filename.endswith('.exe'):
+        
+        # [수정] 입력 인자가 확장자가 고정되어 들어오더라도 OS 플랫폼에 맞춰 확장자를 유연하게 보정
+        if sys.platform == 'win32' and not filename.endswith('.exe'):
+            filename = f"{filename}.exe"
+        elif sys.platform != 'win32' and filename.endswith('.exe'):
             filename = filename[:-4]
         
         executable = os.path.normpath(os.path.join(base_path, filename))
@@ -85,6 +97,13 @@ def get_executable_path(filename):
             else:
                 raise FileNotFoundError(f"{filename} not found in bundle or system PATH")
         
+        # [추가 안전장치] macOS 환경에서 혹시 바이너리의 실행 권한(chmod +x)이 누락되었을 경우를 대비해 권한 강제 부여
+        if sys.platform != 'win32' and os.path.exists(executable):
+            try:
+                os.chmod(executable, 0o755)
+            except Exception as e:
+                logging.warning(f"Failed to set executable permissions for {filename}: {e}")
+                
         return executable
 
     except Exception as e:
@@ -102,7 +121,8 @@ def verify_ffmpeg_files():
             base_path = os.path.dirname(os.path.abspath(__file__))
             logging.debug(f"Verifying FFmpeg files in normal environment: {base_path}")
         
-        files_to_check = ['ffmpeg.exe', 'ffprobe.exe', 'ffplay.exe']
+        # [수정] 하드코딩된 'ffmpeg.exe' 대신 OS 맞춤형 변수 사용
+        files_to_check = [FFMPEG_NAME, FFPROBE_NAME, FFPLAY_NAME]
         found_files = {}
         
         for file in files_to_check:
@@ -114,8 +134,9 @@ def verify_ffmpeg_files():
                 logging.error(f"Could not find {file}: {str(e)}")
                 raise
 
-        FFMPEG_EXECUTABLE = found_files['ffmpeg.exe']
-        FFPROBE_EXECUTABLE = found_files['ffprobe.exe']
+        # [수정] 딕셔너리 키 참조 방식 변경으로 KeyError 발생 여지 차단
+        FFMPEG_EXECUTABLE = found_files[FFMPEG_NAME]
+        FFPROBE_EXECUTABLE = found_files[FFPROBE_NAME]
 
         return found_files
 
@@ -128,8 +149,8 @@ def initialize_ffmpeg():
     global FFMPEG_EXECUTABLE, FFPROBE_EXECUTABLE
     try:
         found_files = verify_ffmpeg_files()
-        FFMPEG_EXECUTABLE = found_files['ffmpeg.exe']
-        FFPROBE_EXECUTABLE = found_files['ffprobe.exe']
+        FFMPEG_EXECUTABLE = found_files[FFMPEG_NAME]
+        FFPROBE_EXECUTABLE = found_files[FFPROBE_NAME]
 
         # Configure ffmpeg-python
         ffmpeg._ffmpeg_binary = FFMPEG_EXECUTABLE
@@ -152,6 +173,7 @@ def initialize_ffmpeg():
 setup_logging()
 initialize_ffmpeg()
 
+# Rest of your existing functions... (이하 원본 코드와 동일하여 생략)
 # Rest of your existing functions...
 def run_ffmpeg_command(cmd):
     """Run an FFmpeg command with proper path handling"""
