@@ -35,23 +35,25 @@ jobs:
 
     - name: Build Executable with PyInstaller
       run: |
-        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-        echo "Site packages path: $SITE_PACKAGES"
-        
-        # macOS 환경에 맞춘 파이인스톨러 패키징 스크립트
-        pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
-          --hidden-import=numpy \
-          --hidden-import=numpy.core \
-          --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
-          --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
-          --add-data "$SITE_PACKAGES/PIL:PIL" \
-          --add-binary "src/ffmpeg:." \
-          --add-binary "src/ffprobe:." \
-          --add-binary "src/ffplay:." \
-          --collect-submodules numpy \
-          --log-level DEBUG \
-          src/main.pyw
-
+            SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+            echo "Site packages path: $SITE_PACKAGES"
+            
+            # [수정] --add-binary 목적지를 루트(.)가 아닌 bin 폴더로 지정하여 모듈 폴더 덮어쓰기를 방지합니다.
+            # [수정] --collect-submodules ffmpeg 를 추가해 ffmpeg 파이썬 모듈 누락을 방지합니다.
+            pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
+              --hidden-import=numpy \
+              --hidden-import=numpy.core \
+              --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
+              --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
+              --add-data "$SITE_PACKAGES/PIL:PIL" \
+              --add-binary "src/ffmpeg:bin" \
+              --add-binary "src/ffprobe:bin" \
+              --add-binary "src/ffplay:bin" \
+              --collect-submodules ffmpeg \
+              --collect-submodules numpy \
+              --log-level DEBUG \
+              src/main.pyw
+          
     - name: Create DMG (Using appdmg)
       run: |
         # 서명 에러가 없는 오픈소스 표준 DMG 빌드 도구 설치
