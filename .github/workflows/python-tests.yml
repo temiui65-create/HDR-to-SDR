@@ -2,8 +2,8 @@ name: Build macOS DMG
 
 on:
   push:
-    branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정하세요 (예: master, main 등)
-  workflow_dispatch: # 수동으로 빌드를 실행할 수 있는 버튼을 활성화합니다
+    branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정 (master 등)
+  workflow_dispatch:
 
 jobs:
   build-macos:
@@ -28,7 +28,6 @@ jobs:
     - name: Install Homebrew FFmpeg & Copy to src
       run: |
         brew install ffmpeg
-        # PyInstaller 빌드를 위해 src 폴더에 macOS용 ffmpeg 바이너리 복사
         mkdir -p src
         cp $(which ffmpeg) src/ffmpeg
         cp $(which ffprobe) src/ffprobe
@@ -36,11 +35,11 @@ jobs:
 
     - name: Build Executable with PyInstaller
       run: |
-        # Python이 설치된 site-packages 실제 위치를 환경 변수로 자동 획득합니다.
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
         echo "Site packages path: $SITE_PACKAGES"
         
-        # macOS 환경에 맞춰 세미콜론(;)을 콜론(:)으로 변경하고, 줄바꿈 기호를 \ 로 수정하여 빌드합니다.
+        # macOS 환경에서는 폴더 통째로(--add-data) 복사할 때 경로가 꼬이지 않도록 
+        # 목적지 경로를 라이브러리 이름 명확히 지정해 주는 것이 안전합니다.
         pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
           --hidden-import=numpy \
           --hidden-import=numpy.core \
@@ -56,14 +55,15 @@ jobs:
 
     - name: Create DMG
       run: |
-        # node 기반의 create-dmg 도구를 사용하여 깔끔한 DMG를 생성합니다.
         npm install -g create-dmg
         cd dist
-        create-dmg "HDR_to_SDR_Converter.app" || true
-        # 생성된 DMG 파일명을 고정값으로 정형화합니다.
+        
+        # [핵심 수정] --identity="" 옵션을 추가하여 애플 인증서 서명 단계를 건너뜁니다.
+        create-dmg "HDR_to_SDR_Converter.app" --identity="" || true
+        
+        # 파일 이름 정형화
         mv *.dmg HDR_to_SDR_Converter_macOS.dmg
 
-    # [수정 완료] 오타가 난 부분을 공식 액션 명칭으로 올바르게 수정했습니다.
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
