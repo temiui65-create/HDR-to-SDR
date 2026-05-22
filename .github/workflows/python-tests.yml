@@ -2,7 +2,7 @@ name: Build macOS DMG
 
 on:
   push:
-    branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정하세요
+    branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정하세요 (예: master, main 등)
   workflow_dispatch: # 수동으로 빌드를 실행할 수 있는 버튼을 활성화합니다
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller dmglib # dmg 생성을 위해 dmglib 또는 도구 설치
+        pip install pyinstaller
 
     - name: Install Homebrew FFmpeg & Copy to src
       run: |
@@ -32,25 +32,27 @@ jobs:
         mkdir -p src
         cp $(which ffmpeg) src/ffmpeg
         cp $(which ffprobe) src/ffprobe
-        # ffplay가 필요한 경우 함께 복사 (없으면 생략 가능)
-        if which ffplay > /dev/null; then cp $(which ffplay) src/ffplay; fi
+        cp $(which ffplay) src/ffplay
 
     - name: Build Executable with PyInstaller
       run: |
-        # macOS 환경에 맞춰 세미콜론(;)을 콜론(:)으로, 줄바꿈(^)을 (\)로 변경합니다.
-        # 실행 파일(.exe) 확장자를 제거하고 macOS 앱 번들(.app) 형태로 빌드하게 구성합니다.
+        # Python이 설치된 site-packages 실제 위치를 환경 변수로 자동 획득합니다.
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        echo "Site packages path: $SITE_PACKAGES"
+        
+        # macOS 환경에 맞춰 세미콜론(;)을 콜론(:)으로 변경하고, 줄바꿈 기호를 \ 로 수정하여 빌드합니다.
         pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
           --hidden-import=numpy \
           --hidden-import=numpy.core \
+          --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
+          --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
+          --add-data "$SITE_PACKAGES/PIL:PIL" \
           --add-binary "src/ffmpeg:." \
           --add-binary "src/ffprobe:." \
+          --add-binary "src/ffplay:." \
           --collect-submodules numpy \
           --log-level DEBUG \
           src/main.pyw
-          
-        # 주의: 기존 sv_ttk나 tkinterdnd2 등 패키지 경로 정보는 
-        # GitHub Actions 환경의 site-packages 위치를 자동으로 잡도록 `--add-data`를 수정하거나
-        # 필요한 경우에만 추가해야 합니다. 보통 가상환경이 아니므로 생략해도 자동으로 수집되는 경우가 많습니다.
 
     - name: Create DMG
       run: |
@@ -58,11 +60,12 @@ jobs:
         npm install -g create-dmg
         cd dist
         create-dmg "HDR_to_SDR_Converter.app" || true
-        # 생성된 파일명을 확인하고 정형화합니다.
+        # 생성된 DMG 파일명을 고정값으로 정형화합니다.
         mv *.dmg HDR_to_SDR_Converter_macOS.dmg
 
+    # [수정 완료] 오타가 난 부분을 공식 액션 명칭으로 올바르게 수정했습니다.
     - name: Upload Artifact
-      uses: actions/artifacts-upload@v4
+      uses: actions/upload-artifact@v4
       with:
         name: HDR-to-SDR-macOS-DMG
         path: dist/HDR_to_SDR_Converter_macOS.dmg
