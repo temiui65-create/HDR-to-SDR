@@ -24,15 +24,20 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
+    
+    - name: Setup Full FFmpeg (Static Build with zscale)
+      uses: FedericoCarboni/setup-ffmpeg@v3
+      id: setup-ffmpeg
 
-    - name: Install Homebrew FFmpeg & Copy to src
+    - name: Copy FFmpeg to bin
       run: |
-        brew install ffmpeg
-        mkdir -p src
-        cp $(which ffmpeg) src/ffmpeg
-        cp $(which ffprobe) src/ffprobe
-        cp $(which ffplay) src/ffplay
-
+        # 이전 단계에서 설정한 bin 폴더 구조에 맞게 복사합니다.
+        mkdir -p src/bin
+        cp $(which ffmpeg) src/bin/ffmpeg
+        cp $(which ffprobe) src/bin/ffprobe
+        # 정적 빌드에는 ffplay가 없을 수 있으므로 에러를 무시(|| true)합니다.
+        cp $(which ffplay) src/bin/ffplay || true
+        
     - name: Build Executable with PyInstaller
       run: |
             SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
