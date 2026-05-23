@@ -13,16 +13,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Set up Python
+    - name: Setup Python and Dependencies
       run: |
+        # 1. 시스템 파이썬 대신 Tkinter가 포함된 최신 파이썬을 강제 설치
         brew install python@3.10
-        # alias 설정
-        echo 'export PATH="/opt/homebrew/opt/python@3.10/bin:$PATH"' >> $GITHUB_ENV
+        # 2. 파이썬 환경 설정
         python3 -m venv venv
         source venv/bin/activate
         pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
+        # 3. Tkinter 라이브러리가 파이썬 환경에 있는지 확인
+        python3 -c "import tkinter; print('Tkinter is ready!')"
 
     - name: Setup FFmpeg
       run: brew install ffmpeg
@@ -34,7 +36,7 @@ jobs:
         cp src/*.py .
         cp src/*.pyw .
         
-        # 빌드
+        # PyInstaller 실행
         pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
           --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
           --add-binary "$(which ffmpeg):." \
@@ -43,19 +45,15 @@ jobs:
 
     - name: Create DMG
       run: |
-        # 1. 빌드 결과물(폴더 내 .app)을 경로 불문하고 찾아내서 복사
         mkdir -p dmg_tmp
-        APP_PATH=$(find dist -name "*.app" | head -n 1)
-        if [ -z "$APP_PATH" ]; then echo "App not found!"; exit 1; fi
-        cp -r "$APP_PATH" dmg_tmp/
-        
-        # 2. 링크 생성
+        # .app 파일을 찾아서 복사
+        find dist -name "*.app" -exec cp -r {} dmg_tmp/ \;
+        # 바로가기 생성
         ln -s /Applications dmg_tmp/Applications
-        
-        # 3. 압축
+        # DMG 압축
         hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
-    - name: Upload
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: HDR-to-SDR-macOS
