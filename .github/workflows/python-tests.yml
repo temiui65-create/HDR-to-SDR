@@ -27,32 +27,31 @@ jobs:
     - name: Setup FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
-    - name: Build
+    - name: Build Executable
       run: |
-        # 1. 빌드 전 정리
-        rm -rf dist build
-        
-        # 2. 실행파일 빌드
-        # 파일 경로 꼬임 방지를 위해 모든 소스를 현재 디렉토리로 복사
+        # 소스를 루트로 복사하여 경로 문제를 원천 봉쇄
         cp src/*.py .
         cp src/*.pyw .
         
+        # PyInstaller 빌드
         pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
           --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
           --add-binary "$(which ffmpeg):." \
           --add-binary "$(which ffprobe):." \
           main.pyw
 
-    - name: Create DMG
+    - name: Create DMG (Native macOS Tool)
       run: |
-        # 3. macOS 순정 도구 hdiutil을 사용 (어떠한 아키텍처 의존성도 없음)
+        # 1. 빌드 디렉토리 준비
         mkdir -p dmg_tmp
         cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_tmp/
         ln -s /Applications dmg_tmp/Applications
         
+        # 2. 아키텍처를 타지 않는 맥 내장 도구로 DMG 생성
+        # 이 명령어는 x64/arm64 무관하게 작동하는 맥 순정 명령어입니다.
         hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
-    - name: Upload
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: HDR-to-SDR-macOS
