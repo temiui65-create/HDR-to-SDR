@@ -10,7 +10,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout
       uses: actions/checkout@v4
 
     - name: Set up Python
@@ -21,50 +21,39 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Setup Full FFmpeg
+    - name: Setup FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
-    - name: Prepare Binaries
+    - name: Build
       run: |
-        mkdir -p src/bin
-        cp $(which ffmpeg) src/bin/ffmpeg
-        cp $(which ffprobe) src/bin/ffprobe
-        touch src/bin/ffplay
-
-    - name: Build Executable
-      run: |
-        # 프로젝트 루트를 파이썬 경로에 추가하여 절대 경로로 인식시킴
-        export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+        # 1. 빌드 전 정리
+        rm -rf dist build
         
-        pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
-          --paths=src \
-          --collect-all gui \
-          --collect-all conversion \
-          --collect-all utils \
-          --hidden-import=gui \
-          --hidden-import=conversion \
-          --hidden-import=utils \
-          --add-data "src/gui.py:." \
-          --add-data "src/conversion.py:." \
-          --add-data "src/utils.py:." \
-          --add-binary "src/bin/ffmpeg:bin" \
-          --add-binary "src/bin/ffprobe:bin" \
-          --add-binary "src/bin/ffplay:bin" \
-          src/main.pyw
+        # 2. 실행파일 빌드
+        # 파일 경로 꼬임 방지를 위해 모든 소스를 현재 디렉토리로 복사
+        cp src/*.py .
+        cp src/*.pyw .
+        
+        pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
+          --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
+          --add-binary "$(which ffmpeg):." \
+          --add-binary "$(which ffprobe):." \
+          main.pyw
 
     - name: Create DMG
       run: |
-        mkdir -p dmg_build
-        cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_build/
-        ln -s /Applications dmg_build/Applications
-        hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_build -ov -format UDZO dist/HDR_to_SDR_Converter_macOS.dmg
+        # 3. macOS 순정 도구 hdiutil을 사용 (어떠한 아키텍처 의존성도 없음)
+        mkdir -p dmg_tmp
+        cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_tmp/
+        ln -s /Applications dmg_tmp/Applications
+        
+        hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
-    - name: Upload Artifact
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HDR-to-SDR-macOS-DMG
-        path: dist/HDR_to_SDR_Converter_macOS.dmg
+        name: HDR-to-SDR-macOS
+        path: dist/HDR_to_SDR_Converter.dmg
