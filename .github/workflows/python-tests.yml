@@ -13,9 +13,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # Node.js를 사용하는 공식 액션들을 배제하기 위해 직접 파이썬 설치
     - name: Set up Python
       run: |
+        # Node 기반의 setup-python 액션 대신 brew로 직접 설치하여 의존성 제거
         brew install python@3.10
         python3 -m venv venv
         source venv/bin/activate
@@ -29,21 +29,28 @@ jobs:
     - name: Build Executable
       run: |
         source venv/bin/activate
+        # 경로 꼬임 방지를 위해 모든 파이썬 파일을 루트로 복사
         cp src/*.py .
         cp src/*.pyw .
+        
+        # 순수 파이썬 빌드
         pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
           --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
           --add-binary "$(which ffmpeg):." \
           --add-binary "$(which ffprobe):." \
           main.pyw
 
-    - name: Create DMG
+    - name: Create DMG (macOS Native)
       run: |
+        # NPM 도구 없이 맥 내장 hdiutil만 사용
         mkdir -p dmg_tmp
         cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_tmp/
+        ln -s /Applications dmg_tmp/Applications
         hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
-    # 업로드 액션도 아키텍처 체크를 할 수 있으니, 직접 curl로 전송하거나 
-    # 일단 여기서 빌드까지만 성공하는지 보겠습니다.
-    - name: Final Result
-      run: ls -lh dist/HDR_to_SDR_Converter.dmg
+    - name: Upload Result
+      # Node 기반의 공식 업로드 액션도 에러를 유발할 수 있으므로 
+      # 빌드 파일 존재 여부를 출력하고 마칩니다.
+      run: |
+        ls -lh dist/HDR_to_SDR_Converter.dmg
+        echo "빌드 완료: dist/HDR_to_SDR_Converter.dmg 파일이 생성되었습니다."
