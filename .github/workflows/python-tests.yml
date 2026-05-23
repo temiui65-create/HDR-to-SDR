@@ -15,8 +15,9 @@ jobs:
 
     - name: Set up Python
       run: |
-        # Node 기반의 setup-python 액션 대신 brew로 직접 설치하여 의존성 제거
         brew install python@3.10
+        # alias 설정
+        echo 'export PATH="/opt/homebrew/opt/python@3.10/bin:$PATH"' >> $GITHUB_ENV
         python3 -m venv venv
         source venv/bin/activate
         pip install --upgrade pip
@@ -29,28 +30,33 @@ jobs:
     - name: Build Executable
       run: |
         source venv/bin/activate
-        # 경로 꼬임 방지를 위해 모든 파이썬 파일을 루트로 복사
+        # 모든 파일을 루트로 복사
         cp src/*.py .
         cp src/*.pyw .
         
-        # 순수 파이썬 빌드
+        # 빌드
         pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
           --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
           --add-binary "$(which ffmpeg):." \
           --add-binary "$(which ffprobe):." \
           main.pyw
 
-    - name: Create DMG (macOS Native)
+    - name: Create DMG
       run: |
-        # NPM 도구 없이 맥 내장 hdiutil만 사용
+        # 1. 빌드 결과물(폴더 내 .app)을 경로 불문하고 찾아내서 복사
         mkdir -p dmg_tmp
-        cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_tmp/
+        APP_PATH=$(find dist -name "*.app" | head -n 1)
+        if [ -z "$APP_PATH" ]; then echo "App not found!"; exit 1; fi
+        cp -r "$APP_PATH" dmg_tmp/
+        
+        # 2. 링크 생성
         ln -s /Applications dmg_tmp/Applications
+        
+        # 3. 압축
         hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
-    - name: Upload Result
-      # Node 기반의 공식 업로드 액션도 에러를 유발할 수 있으므로 
-      # 빌드 파일 존재 여부를 출력하고 마칩니다.
-      run: |
-        ls -lh dist/HDR_to_SDR_Converter.dmg
-        echo "빌드 완료: dist/HDR_to_SDR_Converter.dmg 파일이 생성되었습니다."
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: HDR-to-SDR-macOS
+        path: dist/HDR_to_SDR_Converter.dmg
