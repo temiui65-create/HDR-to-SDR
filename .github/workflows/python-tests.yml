@@ -2,12 +2,13 @@ name: Build macOS DMG
 
 on:
   push:
-    branches: [ "main" ] # 본인의 주 브랜치 이름에 맞게 수정 (master 등)
-  workflow_dispatch: # 수동 빌드 버튼 활성화
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-latest # 대기열 없는 최신 M1 서버 사용!
+    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -24,52 +25,45 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
-    
-    - name: Setup Full FFmpeg (Static Build with zscale)
-      uses: FedericoCarboni/setup-ffmpeg@v3
-      id: setup-ffmpeg
 
-    - name: Copy FFmpeg to bin
+    - name: Download Full FFmpeg (BtbN ARM64 with zscale)
       run: |
-        # 이전 단계에서 설정한 bin 폴더 구조에 맞게 복사합니다.
-        mkdir -p src/bin
-        cp $(which ffmpeg) src/bin/ffmpeg
-        cp $(which ffprobe) src/bin/ffprobe
-        # 정적 빌드에는 ffplay가 없을 수 있으므로 에러를 무시(|| true)합니다.
-        cp $(which ffplay) src/bin/ffplay || true
+        # zscale이 포함된 M1(arm64) 전용 최고사양 FFmpeg를 직통으로 다운로드합니다.
+        curl -L -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos-arm64-gpl.zip
+        unzip ffmpeg.zip
         
+        # 압축 푼 폴더에서 바이너리를 빼내어 src/bin 폴더에 세팅합니다.
+        mkdir -p src/bin
+        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffmpeg src/bin/
+        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffprobe src/bin/
+        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffplay src/bin/ || true
+
     - name: Build Executable with PyInstaller
       run: |
-            SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-            echo "Site packages path: $SITE_PACKAGES"
-            
-            # [수정] --add-binary 목적지를 루트(.)가 아닌 bin 폴더로 지정하여 모듈 폴더 덮어쓰기를 방지합니다.
-            # [수정] --collect-submodules ffmpeg 를 추가해 ffmpeg 파이썬 모듈 누락을 방지합니다.
-            pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
-              --hidden-import=numpy \
-              --hidden-import=numpy.core \
-              --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
-              --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
-              --add-data "$SITE_PACKAGES/PIL:PIL" \
-              --add-binary "src/ffmpeg:bin" \
-              --add-binary "src/ffprobe:bin" \
-              --add-binary "src/ffplay:bin" \
-              --collect-submodules ffmpeg \
-              --collect-submodules numpy \
-              --log-level DEBUG \
-              src/main.pyw
-          
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        
+        pyinstaller --noconfirm --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
+          --hidden-import=numpy \
+          --hidden-import=numpy.core \
+          --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
+          --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
+          --add-data "$SITE_PACKAGES/PIL:PIL" \
+          --add-binary "src/bin/ffmpeg:bin" \
+          --add-binary "src/bin/ffprobe:bin" \
+          --add-binary "src/bin/ffplay:bin" \
+          --collect-submodules ffmpeg \
+          --collect-submodules numpy \
+          --log-level DEBUG \
+          src/main.pyw
+
     - name: Create DMG (Using appdmg)
       run: |
-        # 서명 에러가 없는 오픈소스 표준 DMG 빌드 도구 설치
-        npm install -g appdmg
+        npm install -g appdmg --no-fund --no-audit
         
-        # appdmg 구성을 위한 설정 JSON 정의 파일 동적 생성
         cat << 'EOF' > appdmg.json
         {
           "title": "HDR to SDR Converter",
           "icon": "logo/icon.ico",
-          "background": "",
           "contents": [
             { "x": 448, "y": 344, "type": "link", "path": "/Applications" },
             { "x": 192, "y": 344, "type": "file", "path": "dist/HDR_to_SDR_Converter.app" }
@@ -77,7 +71,6 @@ jobs:
         }
         EOF
         
-        # DMG 패키징 빌드 실행
         appdmg appdmg.json dist/HDR_to_SDR_Converter_macOS.dmg
 
     - name: Upload Artifact
