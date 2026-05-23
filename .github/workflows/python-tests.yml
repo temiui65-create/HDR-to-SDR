@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-macos:
-    runs-on: macos-latest # 대기열 없는 최신 M1 서버 사용!
+    runs-on: macos-latest
     timeout-minutes: 15
 
     steps:
@@ -26,22 +26,33 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Download Full FFmpeg (BtbN ARM64 with zscale)
+    - name: Download Full FFmpeg (Martin Riedl ARM64 with zscale)
       run: |
-        # zscale이 포함된 M1(arm64) 전용 최고사양 FFmpeg를 직통으로 다운로드합니다.
-        curl -L -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos-arm64-gpl.zip
-        unzip ffmpeg.zip
+        # 죽어버린 BtbN 링크 대신, 완벽하게 작동하는 
+        # Martin Riedl의 M1(arm64) 풀버전(zscale 포함) 직통 링크로 변경합니다.
+        curl -L -o ffmpeg.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffmpeg.zip"
+        curl -L -o ffprobe.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffprobe.zip"
+        curl -L -o ffplay.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffplay.zip"
         
-        # 압축 푼 폴더에서 바이너리를 빼내어 src/bin 폴더에 세팅합니다.
+        # 압축 해제 (경고문 무시를 위해 -q 옵션 추가)
+        unzip -q ffmpeg.zip -d ffmpeg_ext
+        unzip -q ffprobe.zip -d ffprobe_ext
+        unzip -q ffplay.zip -d ffplay_ext
+        
         mkdir -p src/bin
-        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffmpeg src/bin/
-        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffprobe src/bin/
-        cp ffmpeg-master-latest-macos-arm64-gpl/bin/ffplay src/bin/ || true
+        # zip 내부의 폴더 구조와 상관없이 바이너리만 쏙 빼서 bin 폴더로 강제 이동시킵니다.
+        find ffmpeg_ext -type f -name "ffmpeg" -exec mv {} src/bin/ \;
+        find ffprobe_ext -type f -name "ffprobe" -exec mv {} src/bin/ \;
+        find ffplay_ext -type f -name "ffplay" -exec mv {} src/bin/ \;
+        
+        # 맥OS 실행 권한 필수 부여
+        chmod +x src/bin/ffmpeg src/bin/ffprobe src/bin/ffplay
 
     - name: Build Executable with PyInstaller
       run: |
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
         
+        # 앱 실행 코드의 검증 로직 통과를 위해 ffplay까지 완벽히 패키징합니다.
         pyinstaller --noconfirm --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
           --hidden-import=numpy \
           --hidden-import=numpy.core \
