@@ -29,11 +29,11 @@ jobs:
 
     - name: Build Executable
       run: |
-        # 소스를 루트로 복사하여 경로 문제를 원천 봉쇄
+        # 1. 모든 소스를 최상위 루트로 복사 (경로 꼬임 방지)
         cp src/*.py .
         cp src/*.pyw .
         
-        # PyInstaller 빌드
+        # 2. 파이썬 기반 빌드 (NPM 아예 안 씀)
         pyinstaller --noconfirm --onedir --windowed --name "HDR_to_SDR_Converter" \
           --add-data "gui.py:." --add-data "conversion.py:." --add-data "utils.py:." \
           --add-binary "$(which ffmpeg):." \
@@ -42,13 +42,11 @@ jobs:
 
     - name: Create DMG (Native macOS Tool)
       run: |
-        # 1. 빌드 디렉토리 준비
+        # 3. 아키텍처 타지 않는 macOS 기본 도구 hdiutil 사용
         mkdir -p dmg_tmp
         cp -r dist/HDR_to_SDR_Converter/HDR_to_SDR_Converter.app dmg_tmp/
         ln -s /Applications dmg_tmp/Applications
         
-        # 2. 아키텍처를 타지 않는 맥 내장 도구로 DMG 생성
-        # 이 명령어는 x64/arm64 무관하게 작동하는 맥 순정 명령어입니다.
         hdiutil create -volname "HDR_to_SDR" -srcfolder dmg_tmp -ov -format UDZO dist/HDR_to_SDR_Converter.dmg
 
     - name: Upload Artifact
