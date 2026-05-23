@@ -63,23 +63,20 @@ jobs:
           --log-level DEBUG \
           src/main.pyw
 
-    - name: Create DMG (Using appdmg)
+    - name: Create DMG (Using Native macOS hdiutil)
       run: |
-        npm install -g appdmg
+        # 외부 라이브러리(NPM)를 버리고 맥 순정 내장 도구(hdiutil)를 사용합니다.
+        # 1. DMG 내부에 들어갈 파일들을 모아둘 임시 폴더 생성
+        mkdir -p dmg_build
         
-        cat << 'EOF' > appdmg.json
-        {
-          "title": "HDR to SDR Converter",
-          "icon": "logo/icon.ico",
-          "background": "",
-          "contents": [
-            { "x": 448, "y": 344, "type": "link", "path": "/Applications" },
-            { "x": 192, "y": 344, "type": "file", "path": "dist/HDR_to_SDR_Converter.app" }
-          ]
-        }
-        EOF
+        # 2. 빌드된 앱을 폴더 안으로 이동
+        mv dist/HDR_to_SDR_Converter.app dmg_build/
         
-        appdmg appdmg.json dist/HDR_to_SDR_Converter_macOS.dmg
+        # 3. 드래그 앤 드롭을 위한 '응용 프로그램(Applications)' 숏컷 링크 생성
+        ln -s /Applications dmg_build/Applications
+        
+        # 4. 맥 순정 명령어로 깔끔하게 압축하여 DMG 파일 생성
+        hdiutil create -volname "HDR_to_SDR_Converter" -srcfolder dmg_build -ov -format UDZO dist/HDR_to_SDR_Converter_macOS.dmg
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
