@@ -51,17 +51,22 @@ jobs:
     - name: Build Executable with PyInstaller
       run: |
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        echo "Site packages path: $SITE_PACKAGES"
         
-        # 앱 실행 코드의 검증 로직 통과를 위해 ffplay까지 완벽히 패키징합니다.
-        pyinstaller --noconfirm --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
+        # [핵심 수정] --paths=src 와 --hidden-import 로 파이썬 파일들을 무조건 포함시키도록 강제합니다.
+        pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
+          --paths=src \
+          --hidden-import=gui \
+          --hidden-import=conversion \
+          --hidden-import=utils \
           --hidden-import=numpy \
           --hidden-import=numpy.core \
           --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
           --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
           --add-data "$SITE_PACKAGES/PIL:PIL" \
-          --add-binary "src/bin/ffmpeg:bin" \
-          --add-binary "src/bin/ffprobe:bin" \
-          --add-binary "src/bin/ffplay:bin" \
+          --add-binary "src/ffmpeg:bin" \
+          --add-binary "src/ffprobe:bin" \
+          --add-binary "src/ffplay:bin" \
           --collect-submodules ffmpeg \
           --collect-submodules numpy \
           --log-level DEBUG \
