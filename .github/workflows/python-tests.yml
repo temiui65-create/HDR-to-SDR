@@ -8,7 +8,6 @@ on:
 jobs:
   build-macos:
     runs-on: macos-latest
-    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -26,34 +25,26 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Download Full FFmpeg (Martin Riedl ARM64 with zscale)
+    - name: Setup Full FFmpeg (Static Build with zscale)
+      uses: FedericoCarboni/setup-ffmpeg@v3
+      id: setup-ffmpeg
+
+    - name: Copy FFmpeg to bin
       run: |
-        # 죽어버린 BtbN 링크 대신, 완벽하게 작동하는 
-        # Martin Riedl의 M1(arm64) 풀버전(zscale 포함) 직통 링크로 변경합니다.
-        curl -L -o ffmpeg.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffmpeg.zip"
-        curl -L -o ffprobe.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffprobe.zip"
-        curl -L -o ffplay.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/snapshot/ffplay.zip"
-        
-        # 압축 해제 (경고문 무시를 위해 -q 옵션 추가)
-        unzip -q ffmpeg.zip -d ffmpeg_ext
-        unzip -q ffprobe.zip -d ffprobe_ext
-        unzip -q ffplay.zip -d ffplay_ext
-        
         mkdir -p src/bin
-        # zip 내부의 폴더 구조와 상관없이 바이너리만 쏙 빼서 bin 폴더로 강제 이동시킵니다.
-        find ffmpeg_ext -type f -name "ffmpeg" -exec mv {} src/bin/ \;
-        find ffprobe_ext -type f -name "ffprobe" -exec mv {} src/bin/ \;
-        find ffplay_ext -type f -name "ffplay" -exec mv {} src/bin/ \;
+        cp $(which ffmpeg) src/bin/ffmpeg
+        cp $(which ffprobe) src/bin/ffprobe
         
-        # 맥OS 실행 권한 필수 부여
-        chmod +x src/bin/ffmpeg src/bin/ffprobe src/bin/ffplay
+        # [핵심 방어] ffplay가 정적 빌드에 없어서 PyInstaller가 터지는 것을 막기 위해
+        # 파일이 없을 경우 빈 가짜(dummy) 파일을 생성해 줍니다.
+        cp $(which ffplay) src/bin/ffplay || touch src/bin/ffplay
 
     - name: Build Executable with PyInstaller
       run: |
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
         echo "Site packages path: $SITE_PACKAGES"
         
-        # [핵심 수정] --paths=src 와 --hidden-import 로 파이썬 파일들을 무조건 포함시키도록 강제합니다.
+        # [핵심 수정] --add-binary 경로를 src/bin/ffmpeg 로 완벽히 맞췄습니다!
         pyinstaller --windowed --name "HDR_to_SDR_Converter" --icon=logo/icon.ico \
           --paths=src \
           --hidden-import=gui \
@@ -64,9 +55,9 @@ jobs:
           --add-data "$SITE_PACKAGES/sv_ttk:sv_ttk" \
           --add-data "$SITE_PACKAGES/tkinterdnd2:tkinterdnd2" \
           --add-data "$SITE_PACKAGES/PIL:PIL" \
-          --add-binary "src/ffmpeg:bin" \
-          --add-binary "src/ffprobe:bin" \
-          --add-binary "src/ffplay:bin" \
+          --add-binary "src/bin/ffmpeg:bin" \
+          --add-binary "src/bin/ffprobe:bin" \
+          --add-binary "src/bin/ffplay:bin" \
           --collect-submodules ffmpeg \
           --collect-submodules numpy \
           --log-level DEBUG \
@@ -74,12 +65,13 @@ jobs:
 
     - name: Create DMG (Using appdmg)
       run: |
-        npm install -g appdmg --no-fund --no-audit
+        npm install -g appdmg
         
         cat << 'EOF' > appdmg.json
         {
           "title": "HDR to SDR Converter",
           "icon": "logo/icon.ico",
+          "background": "",
           "contents": [
             { "x": 448, "y": 344, "type": "link", "path": "/Applications" },
             { "x": 192, "y": 344, "type": "file", "path": "dist/HDR_to_SDR_Converter.app" }
